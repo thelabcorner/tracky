@@ -36,20 +36,25 @@
     </script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-
         body { font-family: 'Inter', sans-serif; background-color: #09090b; color: #fafafa; }
-
-        /* Premium Scrollbar */
         ::-webkit-scrollbar { width: 6px; height: 6px; }
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: #27272a; border-radius: 3px; }
         ::-webkit-scrollbar-thumb:hover { background: #3f3f46; }
-
         .glass-panel {
             background: rgba(24, 24, 27, 0.6);
             backdrop-filter: blur(12px);
             -webkit-backdrop-filter: blur(12px);
             border: 1px solid rgba(63, 63, 70, 0.4);
+        }
+
+        /* Toggle Switch Styling */
+        .toggle-checkbox:checked {
+            right: 0;
+            border-color: #22c55e;
+        }
+        .toggle-checkbox:checked + .toggle-label {
+            background-color: #22c55e;
         }
     </style>
 </head>
@@ -144,11 +149,12 @@
                             Live Sync URL
                         </h3>
                         <p class="text-xs text-zinc-400 mt-1 max-w-md">
-                            This URL contains your config. When you use it in qBittorrent, Cloudflare will fetch and merge all sources instantly.
+                            This URL contains your config. Cloudflare will fetch, merge, and format sources instantly.
                         </p>
                     </div>
                 </div>
 
+                <!-- URL Input -->
                 <div class="relative group">
                     <input type="text" id="exportUrl" readonly
                            class="block w-full rounded-lg border border-zinc-700 bg-zinc-900 text-zinc-400 px-4 py-3 pr-28 text-xs font-mono focus:ring-1 focus:ring-white focus:border-white focus:text-white transition cursor-text select-all"
@@ -160,6 +166,22 @@
                             Copy Link
                         </button>
                     </div>
+                </div>
+
+                <!-- Settings Toggle Area -->
+                <div class="flex items-center gap-4 pt-2 border-t border-zinc-800">
+                    <span class="text-xs font-semibold text-zinc-500 uppercase tracking-wide">Output Format:</span>
+
+                    <label class="flex items-center cursor-pointer select-none group">
+                        <div class="relative">
+                            <input type="checkbox" id="doubleNewlineToggle" class="sr-only" onchange="toggleNewlineMode()">
+                            <div class="block w-10 h-6 bg-zinc-800 rounded-full border border-zinc-700 group-hover:border-zinc-500 transition"></div>
+                            <div class="dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-all duration-300 transform"></div>
+                        </div>
+                        <div class="ml-3 text-xs text-zinc-300 group-hover:text-white transition">
+                            Double Spacing <span class="text-zinc-500 font-mono">(\n\n)</span>
+                        </div>
+                    </label>
                 </div>
             </div>
         </div>
@@ -206,6 +228,18 @@
     </div>
 </main>
 
+<style>
+    /* Custom Toggle Logic */
+    input:checked ~ .dot {
+        transform: translateX(100%);
+        background-color: #22c55e;
+    }
+    input:checked ~ .block {
+        background-color: #18181b; /* keep dark bg but enable green dot */
+        border-color: #22c55e;
+    }
+</style>
+
 <script>
     // --- CONFIGURATION ---
     const DEFAULT_SOURCES = [
@@ -217,6 +251,7 @@
     const state = {
         sources: JSON.parse(localStorage.getItem('tracky_sources')) || [...DEFAULT_SOURCES],
         manual: JSON.parse(localStorage.getItem('tracky_manual')) || [],
+        doubleNewline: JSON.parse(localStorage.getItem('tracky_doublenewline')) || false,
         previewData: []
     };
 
@@ -224,6 +259,10 @@
     document.addEventListener('DOMContentLoaded', () => {
         renderSources();
         renderManual();
+
+        // Set toggle state
+        document.getElementById('doubleNewlineToggle').checked = state.doubleNewline;
+
         generateUrl();
     });
 
@@ -238,7 +277,7 @@
             div.className = "flex items-center justify-between p-2.5 rounded-lg border border-zinc-800 bg-zinc-900 hover:border-zinc-700 group transition";
             div.innerHTML = `
                     <div class="flex items-center gap-3 overflow-hidden">
-                        <div class="w-1.5 h-1.5 rounded-full bg-zinc-600 group-hover:bg-blue-500 transition source-dot" id="dot-${idx}"></div>
+                        <div class="w-1.5 h-1.5 rounded-full bg-zinc-600 group-hover:bg-blue-500 transition source-dot" id="dot-${idx}" data-url="${url}"></div>
                         <div class="flex flex-col min-w-0">
                             <span class="text-xs font-medium text-zinc-300 truncate" title="${url}">${domain}</span>
                             <span class="text-[10px] text-zinc-600 truncate font-mono">${url}</span>
@@ -262,7 +301,7 @@
         state.sources.push(val);
         input.value = '';
         renderSources();
-        resetPreview(); // Invalidate preview
+        resetPreview();
     }
 
     function removeSource(idx) {
@@ -324,22 +363,23 @@
         resetPreview();
     }
 
-    // --- CORE: URL GENERATION ---
+    // --- FORMATTING LOGIC ---
+    function toggleNewlineMode() {
+        const checkbox = document.getElementById('doubleNewlineToggle');
+        state.doubleNewline = checkbox.checked;
+        saveState();
+    }
+
+    // --- URL GENERATION ---
     function generateUrl() {
-        // This is the "Stateless" magic.
-        // We encode the config, not the result.
         const payload = {
             sources: state.sources,
-            manual: state.manual
+            manual: state.manual,
+            doubleNewline: state.doubleNewline // Send this setting to the server
         };
-
-        // 1. Stringify
         const json = JSON.stringify(payload);
-        // 2. Base64 (Handle Unicode/Spaces if any, though URLs usually don't have them)
         const b64 = btoa(json);
-        // 3. Construct Link
         const fullUrl = `${window.location.origin}/api/raw?data=${encodeURIComponent(b64)}`;
-
         document.getElementById('exportUrl').value = fullUrl;
     }
 
@@ -361,10 +401,11 @@
     function saveState() {
         localStorage.setItem('tracky_sources', JSON.stringify(state.sources));
         localStorage.setItem('tracky_manual', JSON.stringify(state.manual));
-        generateUrl(); // Update URL whenever state changes
+        localStorage.setItem('tracky_doublenewline', JSON.stringify(state.doubleNewline));
+        generateUrl();
     }
 
-    // --- PREVIEW LOGIC (Using Proxy) ---
+    // --- PREVIEW LOGIC (BATCH MODE) ---
     function resetPreview() {
         document.getElementById('previewOverlay').classList.remove('hidden');
         document.getElementById('previewBadge').classList.add('hidden');
@@ -377,38 +418,46 @@
         btn.disabled = true;
 
         const allTrackers = new Set(state.manual);
+        const sourcesToFetch = state.sources;
 
-        // Fetch all sources via our Proxy
-        const promises = state.sources.map(async (url, idx) => {
-            const dot = document.getElementById(`dot-${idx}`);
+        if (sourcesToFetch.length > 0) {
             try {
-                const res = await fetch(`/api/proxy?url=${encodeURIComponent(url)}`);
-                if(!res.ok) throw new Error('Err');
-                const text = await res.text();
+                const encodedUrls = JSON.stringify(sourcesToFetch);
+                const res = await fetch(`/api/proxy?urls=${encodeURIComponent(encodedUrls)}`);
 
-                text.split('\n').forEach(line => {
-                    const t = line.trim();
-                    if(t && !t.startsWith('#') && (t.startsWith('udp') || t.startsWith('http'))) {
-                        allTrackers.add(t);
+                if (!res.ok) throw new Error('Proxy Error');
+
+                const resultsMap = await res.json();
+
+                state.sources.forEach((url, idx) => {
+                    const dot = document.getElementById(`dot-${idx}`);
+                    const data = resultsMap[url];
+
+                    if (data && data.success) {
+                        if(dot) dot.className = "w-1.5 h-1.5 rounded-full bg-green-500 transition source-dot";
+
+                        data.content.split('\n').forEach(line => {
+                            const t = line.trim();
+                            if(t && !t.startsWith('#') && (t.startsWith('udp') || t.startsWith('http') || t.startsWith('wss'))) {
+                                allTrackers.add(t);
+                            }
+                        });
+                    } else {
+                        if(dot) dot.className = "w-1.5 h-1.5 rounded-full bg-red-500 transition source-dot";
                     }
                 });
 
-                if(dot) dot.classList.replace('bg-zinc-600', 'bg-green-500');
-                if(dot) dot.classList.replace('bg-red-500', 'bg-green-500');
-            } catch(e) {
-                if(dot) dot.classList.replace('bg-zinc-600', 'bg-red-500');
-                if(dot) dot.classList.replace('bg-green-500', 'bg-red-500');
+            } catch (e) {
+                console.error(e);
+                alert("Failed to sync sources.");
             }
-        });
-
-        await Promise.all(promises);
+        }
 
         // Render Results
         const sorted = Array.from(allTrackers).sort();
         const listEl = document.getElementById('previewList');
         listEl.innerHTML = '';
 
-        // Optimize large list rendering with Fragment
         const frag = document.createDocumentFragment();
         sorted.forEach(t => {
             const li = document.createElement('li');
@@ -419,8 +468,6 @@
         listEl.appendChild(frag);
 
         document.getElementById('uniqueCount').innerText = sorted.length;
-
-        // Hide Overlay
         document.getElementById('previewOverlay').classList.add('hidden');
         document.getElementById('previewBadge').classList.remove('hidden');
 
