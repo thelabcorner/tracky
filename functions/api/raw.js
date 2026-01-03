@@ -32,7 +32,7 @@ export async function onRequestGet(context) {
             }
 
         } catch (e) {
-            return new Response("# Error: Invalid Base64 JSON", { status: 400 });
+            return new Response(`# Error: Invalid Base64 JSON ${e}`, { status: 400 });
         }
     } else if (directUrls) {
         // Mode B: Direct CSV (Ad-hoc)
