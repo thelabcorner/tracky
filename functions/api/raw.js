@@ -186,13 +186,20 @@ function decompress(encoded) {
 function latin1ToString(str) {
     let result = '';
     for (let i = 0; i < str.length; i++) {
-        if (str.charCodeAt(i) === 0xFF && i + 2 < str.length) {
-            // Decode escape sequence: \xFF + low byte + high byte
-            const low = str.charCodeAt(i + 1);
-            const high = str.charCodeAt(i + 2);
-            const code = (high << 8) | low;
-            result += String.fromCharCode(code);
-            i += 2;
+        if (str.charCodeAt(i) === 0xFF && i + 2 <= str.length) {
+            const next1 = str.charCodeAt(i + 1);
+            const next2 = str.charCodeAt(i + 2);
+
+            // Check if this is an escaped 0xFF (0xFF + 0xFF + 0x00)
+            if (next1 === 0xFF && next2 === 0x00) {
+                result += '\xFF';
+                i += 2;
+            } else {
+                // This is a high Unicode escape sequence (0xFF + low + high)
+                const code = (next2 << 8) | next1;
+                result += String.fromCharCode(code);
+                i += 2;
+            }
         } else {
             result += str.charAt(i);
         }
