@@ -1,7 +1,7 @@
 // functions/api/raw.js
 
 // Add this near the top with other configuration
-const DEBUG = true; // Set to true to enable debug logging
+const DEBUG = false; // Set to true to enable debug logging
 
 // Modify the onRequestGet function to log debug info
 export async function onRequestGet(context) {
