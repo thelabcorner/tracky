@@ -1,42 +1,51 @@
 // functions/api/raw.js
 
+// Add this near the top with other configuration
+const DEBUG = true; // Set to true to enable debug logging
+
+// Modify the onRequestGet function to log debug info
 export async function onRequestGet(context) {
     const { request } = context;
     const urlObj = new URL(request.url);
     const encodedData = urlObj.searchParams.get('data');
-    const directUrls = urlObj.searchParams.get('urls'); // Support direct URL list (no config)
+    const directUrls = urlObj.searchParams.get('urls');
 
-    // --- CONFIGURATION ---
     const TIMEOUT_MS = 4000;
     const MAX_SOURCES = 20;
 
     let sources = [];
     let manual = [];
-    let useDoubleNewline = false; // Default: Single newline
+    let useDoubleNewline = false;
+    const debugLogs = [];
+
+    if (DEBUG) debugLogs.push(`[DEBUG] Request URL: ${request.url}`);
 
     // 1. Determine Input Mode
     if (encodedData) {
-        // Mode A: Base64 Config (Standard)
+        if (DEBUG) debugLogs.push(`[DEBUG] Using Base64 config mode`);
         try {
             const decodedData = atob(encodedData.replace(/ /g, '+'));
-            const original = latin1ToString(decodedData); // Decode escape-encoded format
-            const jsonString = decompress(original); // Decompress to get original JSON
+            const original = latin1ToString(decodedData);
+            const jsonString = decompress(original);
             const config = JSON.parse(jsonString);
 
             sources = Array.isArray(config.sources) ? config.sources : [];
             manual = Array.isArray(config.manual) ? config.manual : [];
 
-            // Check for the formatting setting
+            if (DEBUG) debugLogs.push(`[DEBUG] Sources: ${sources.length}, Manual trackers: ${manual.length}`);
+
             if (config.doubleNewline === true) {
                 useDoubleNewline = true;
+                if (DEBUG) debugLogs.push(`[DEBUG] Double newline enabled`);
             }
 
         } catch (e) {
             return new Response(`# Error: Invalid Base64 JSON ${e}`, { status: 400 });
         }
     } else if (directUrls) {
-        // Mode B: Direct CSV (Ad-hoc)
+        if (DEBUG) debugLogs.push(`[DEBUG] Using direct URLs mode`);
         sources = directUrls.split(',');
+        if (DEBUG) debugLogs.push(`[DEBUG] Direct URLs count: ${sources.length}`);
     } else {
         return new Response("# Error: No config provided", { status: 400 });
     }
@@ -46,29 +55,36 @@ export async function onRequestGet(context) {
     }
 
     // 2. Parallel Fetching
+    if (DEBUG) debugLogs.push(`[DEBUG] Fetching ${sources.length} sources...`);
     const fetchPromises = sources.map(async (sourceUrl) => {
         return await safeFetchSource(sourceUrl, TIMEOUT_MS);
     });
 
     const results = await Promise.all(fetchPromises);
+    const successCount = results.filter(r => r !== null).length;
+    if (DEBUG) debugLogs.push(`[DEBUG] Successful fetches: ${successCount}/${sources.length}`);
 
     // 3. Aggregation & Deduplication
     const uniqueTrackers = new Set();
 
-    // Add manual trackers first
     manual.forEach(t => cleanAndAdd(t, uniqueTrackers));
 
-    // Add fetched trackers
     results.forEach(text => {
         if (!text) return;
         const lines = text.split('\n');
         lines.forEach(line => cleanAndAdd(line, uniqueTrackers));
     });
 
+    if (DEBUG) debugLogs.push(`[DEBUG] Unique trackers: ${uniqueTrackers.size}`);
+
     // 4. Generate Response
-    // Select separator based on config
     const separator = useDoubleNewline ? '\n\n' : '\n';
-    const responseText = Array.from(uniqueTrackers).join(separator);
+    let responseText = Array.from(uniqueTrackers).join(separator);
+
+    // Prepend debug logs if enabled
+    if (DEBUG) {
+        responseText = debugLogs.join('\n') + '\n\n' + responseText;
+    }
 
     return new Response(responseText, {
         headers: {
@@ -79,6 +95,7 @@ export async function onRequestGet(context) {
         }
     });
 }
+
 
 function cleanAndAdd(line, set) {
     const clean = line.trim();
