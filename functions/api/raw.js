@@ -19,7 +19,8 @@ export async function onRequestGet(context) {
         // Mode A: Base64 Config (Standard)
         try {
             const decodedData = atob(encodedData.replace(/ /g, '+'));
-            const jsonString = decompress(decodedData); // Decompress to get original JSON
+            const original = latin1ToString(decodedData); // Decode escape-encoded format
+            const jsonString = decompress(original); // Decompress to get original JSON
             const config = JSON.parse(jsonString);
 
             sources = Array.isArray(config.sources) ? config.sources : [];
@@ -161,5 +162,23 @@ function decompress(encoded) {
         result = result.split(marker).join(dictionary[i]);
     }
 
+    return result;
+}
+
+// Convert Latin1-safe format (with escape sequences) back to original string with high Unicode chars
+function latin1ToString(str) {
+    let result = '';
+    for (let i = 0; i < str.length; i++) {
+        if (str.charCodeAt(i) === 0xFF && i + 2 < str.length) {
+            // Decode escape sequence: \xFF + low byte + high byte
+            const low = str.charCodeAt(i + 1);
+            const high = str.charCodeAt(i + 2);
+            const code = (high << 8) | low;
+            result += String.fromCharCode(code);
+            i += 2;
+        } else {
+            result += str.charAt(i);
+        }
+    }
     return result;
 }

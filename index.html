@@ -379,9 +379,45 @@
         };
         const json = JSON.stringify(payload);
         const compressed = compress(json); // Compress JSON before encoding
-        const b64 = btoa(compressed);
+        const safe = stringToLatin1(compressed); // Convert to Latin1-safe format
+        const b64 = btoa(safe);
         const fullUrl = `${window.location.origin}/api/raw?data=${encodeURIComponent(b64)}`;
         document.getElementById('exportUrl').value = fullUrl;
+    }
+
+    // Convert string with high Unicode chars to Latin1-safe format
+    function stringToLatin1(str) {
+        let result = '';
+        for (let i = 0; i < str.length; i++) {
+            const code = str.charCodeAt(i);
+            if (code > 255) {
+                // Encode high chars as escape sequence: \xFF + low byte + high byte
+                result += '\xFF';
+                result += String.fromCharCode(code & 0xFF);
+                result += String.fromCharCode((code >> 8) & 0xFF);
+            } else {
+                result += str.charAt(i);
+            }
+        }
+        return result;
+    }
+
+    // Convert Latin1-safe format back to original string with high Unicode chars
+    function latin1ToString(str) {
+        let result = '';
+        for (let i = 0; i < str.length; i++) {
+            if (str.charCodeAt(i) === 0xFF && i + 2 < str.length) {
+                // Decode escape sequence
+                const low = str.charCodeAt(i + 1);
+                const high = str.charCodeAt(i + 2);
+                const code = (high << 8) | low;
+                result += String.fromCharCode(code);
+                i += 2;
+            } else {
+                result += str.charAt(i);
+            }
+        }
+        return result;
     }
 
     function copyExportUrl() {
