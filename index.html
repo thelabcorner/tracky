@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tracky Pro - Live Sync Manager</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        zinc: {
+                            950: '#09090b',
+                            900: '#18181b',
+                            850: '#202023',
+                            800: '#27272a',
+                            700: '#3f3f46',
+                            600: '#52525b',
+                            500: '#71717a',
+                            400: '#a1a1aa',
+                            300: '#d4d4d8',
+                            200: '#e4e4e7',
+                            100: '#f4f4f5',
+                            50: '#fafafa',
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', '-apple-system', 'system-ui', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'Fira Code', 'monospace'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+        body { font-family: 'Inter', sans-serif; background-color: #09090b; color: #fafafa; }
+
+        /* Premium Scrollbar */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #27272a; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #3f3f46; }
+
+        .glass-panel {
+            background: rgba(24, 24, 27, 0.6);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(63, 63, 70, 0.4);
+        }
+    </style>
+</head>
+<body class="antialiased min-h-screen flex flex-col selection:bg-white selection:text-black">
+
+<!-- Header -->
+<header class="border-b border-zinc-800 bg-zinc-950/80 backdrop-blur sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+            <div class="w-8 h-8 bg-white rounded-lg flex items-center justify-center text-zinc-950 font-bold text-lg shadow-[0_0_15px_rgba(255,255,255,0.3)]">T</div>
+            <div class="flex flex-col leading-none">
+                <span class="font-bold text-sm tracking-wide">TRACKY</span>
+                <span class="text-[10px] text-zinc-500 font-medium uppercase tracking-wider">Live Sync Manager</span>
+            </div>
+        </div>
+        <div class="flex items-center gap-4">
+            <div class="flex items-center gap-2 px-3 py-1 rounded-full bg-green-500/10 border border-green-500/20">
+                    <span class="relative flex h-2 w-2">
+                      <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                      <span class="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                    </span>
+                <span class="text-xs text-green-500 font-medium">Cloudflare Powered</span>
+            </div>
+        </div>
+    </div>
+</header>
+
+<main class="flex-1 max-w-7xl mx-auto px-6 py-8 w-full grid grid-cols-1 lg:grid-cols-12 gap-8">
+
+    <!-- LEFT COLUMN: Configuration -->
+    <div class="lg:col-span-5 space-y-6">
+
+        <!-- 1. Sources Card -->
+        <div class="glass-panel rounded-xl overflow-hidden flex flex-col">
+            <div class="p-4 border-b border-zinc-800 bg-zinc-900/50 flex justify-between items-center">
+                <div>
+                    <h2 class="font-semibold text-sm text-zinc-100">Dynamic Sources</h2>
+                    <p class="text-xs text-zinc-500 mt-0.5">Lists fetched automatically by the server</p>
+                </div>
+                <button onclick="restoreDefaults()" class="text-xs text-zinc-400 hover:text-white transition underline decoration-zinc-700 hover:decoration-white">Reset</button>
+            </div>
+
+            <div class="p-4 space-y-4 bg-zinc-950/30">
+                <div class="flex gap-2">
+                    <input type="text" id="sourceInput" placeholder="https://raw.githubusercontent.com/..."
+                           class="flex-1 bg-zinc-900/50 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 focus:outline-none focus:border-white focus:ring-1 focus:ring-white transition placeholder-zinc-600 font-mono"
+                           onkeydown="if(event.key === 'Enter') addSource()">
+                    <button onclick="addSource()" class="bg-zinc-100 text-zinc-900 px-4 py-2 rounded-lg text-sm font-semibold hover:bg-white hover:shadow-[0_0_10px_rgba(255,255,255,0.2)] transition">Add</button>
+                </div>
+
+                <!-- Source List -->
+                <div id="sourcesList" class="space-y-2 max-h-[250px] overflow-y-auto pr-2">
+                    <!-- Injected via JS -->
+                </div>
+            </div>
+        </div>
+
+        <!-- 2. Manual Card -->
+        <div class="glass-panel rounded-xl overflow-hidden flex flex-col">
+            <div class="p-4 border-b border-zinc-800 bg-zinc-900/50">
+                <h2 class="font-semibold text-sm text-zinc-100">Manual Trackers</h2>
+                <p class="text-xs text-zinc-500 mt-0.5">Static trackers added to every list</p>
+            </div>
+            <div class="p-4 bg-zinc-950/30 space-y-3">
+                    <textarea id="manualInput" rows="3" placeholder="udp://tracker.opentrackr.org:1337"
+                              class="w-full bg-zinc-900/50 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 focus:outline-none focus:border-white transition placeholder-zinc-600 font-mono resize-none"></textarea>
+                <button onclick="addManual()" class="w-full py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-xs font-medium text-zinc-300 hover:text-white hover:bg-zinc-700 transition">
+                    Add to Manual List
+                </button>
+
+                <!-- Manual List Tag Cloud -->
+                <div id="manualList" class="flex flex-wrap gap-2 max-h-[150px] overflow-y-auto">
+                    <!-- Tags Injected via JS -->
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- RIGHT COLUMN: Preview & Export -->
+    <div class="lg:col-span-7 space-y-6">
+
+        <!-- 1. Export Section (Primary Action) -->
+        <div class="relative overflow-hidden rounded-xl border border-zinc-700 bg-gradient-to-b from-zinc-800 to-zinc-900 p-1">
+            <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 opacity-50"></div>
+
+            <div class="bg-zinc-950/90 rounded-lg p-5 space-y-4">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <h3 class="text-base font-bold text-white flex items-center gap-2">
+                            <svg class="w-4 h-4 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/></svg>
+                            Live Sync URL
+                        </h3>
+                        <p class="text-xs text-zinc-400 mt-1 max-w-md">
+                            This URL contains your config. When you use it in qBittorrent, Cloudflare will fetch and merge all sources instantly.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="relative group">
+                    <input type="text" id="exportUrl" readonly
+                           class="block w-full rounded-lg border border-zinc-700 bg-zinc-900 text-zinc-400 px-4 py-3 pr-28 text-xs font-mono focus:ring-1 focus:ring-white focus:border-white focus:text-white transition cursor-text select-all"
+                           value="Generating...">
+
+                    <div class="absolute inset-y-0 right-0 flex items-center pr-1.5">
+                        <button onclick="copyExportUrl()" id="copyExportBtn"
+                                class="inline-flex items-center justify-center rounded-md bg-zinc-100 text-black px-3 py-1.5 text-xs font-bold hover:bg-white hover:scale-105 active:scale-95 transition shadow-lg">
+                            Copy Link
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 2. Preview Panel -->
+        <div class="glass-panel rounded-xl overflow-hidden flex flex-col h-[500px]">
+            <!-- Panel Header -->
+            <div class="p-4 border-b border-zinc-800 bg-zinc-900/50 flex justify-between items-center">
+                <div class="flex items-center gap-3">
+                    <h2 class="font-semibold text-sm text-zinc-100">List Preview</h2>
+                    <span id="previewBadge" class="hidden px-2 py-0.5 rounded text-[10px] bg-zinc-800 border border-zinc-700 text-zinc-400">
+                            Synced just now
+                        </span>
+                </div>
+
+                <div class="flex gap-2">
+                    <div class="text-right mr-2">
+                        <div class="text-[10px] text-zinc-500 uppercase tracking-wider">Unique Trackers</div>
+                        <div class="text-sm font-bold text-white font-mono" id="uniqueCount">--</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Preview List -->
+            <div class="flex-1 bg-zinc-950/30 relative">
+                <!-- Overlay for Empty State -->
+                <div id="previewOverlay" class="absolute inset-0 flex flex-col items-center justify-center bg-zinc-950/50 backdrop-blur-[2px] z-10">
+                    <div class="text-center space-y-3">
+                        <p class="text-sm text-zinc-400">Verify your sources before exporting.</p>
+                        <button onclick="runPreview()" id="previewBtn" class="group relative inline-flex items-center gap-2 px-5 py-2.5 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-white text-sm font-medium rounded-lg transition-all hover:border-zinc-600">
+                            <svg class="w-4 h-4 text-zinc-400 group-hover:text-white transition" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                            Run Preview Sync
+                        </button>
+                    </div>
+                </div>
+
+                <!-- The List -->
+                <ul id="previewList" class="p-0 divide-y divide-zinc-800/50 h-full overflow-auto text-xs font-mono text-zinc-400">
+                    <!-- List items -->
+                </ul>
+            </div>
+        </div>
+
+    </div>
+</main>
+
+<script>
+    // --- CONFIGURATION ---
+    const DEFAULT_SOURCES = [
+        "https://cf.trackerslist.com/best.txt",
+        "https://ngosang.github.io/trackerslist/trackers_best.txt"
+    ];
+
+    // --- STATE ---
+    const state = {
+        sources: JSON.parse(localStorage.getItem('tracky_sources')) || [...DEFAULT_SOURCES],
+        manual: JSON.parse(localStorage.getItem('tracky_manual')) || [],
+        previewData: []
+    };
+
+    // --- INIT ---
+    document.addEventListener('DOMContentLoaded', () => {
+        renderSources();
+        renderManual();
+        generateUrl();
+    });
+
+    // --- SOURCES LOGIC ---
+    function renderSources() {
+        const list = document.getElementById('sourcesList');
+        list.innerHTML = '';
+
+        state.sources.forEach((url, idx) => {
+            const domain = new URL(url).hostname;
+            const div = document.createElement('div');
+            div.className = "flex items-center justify-between p-2.5 rounded-lg border border-zinc-800 bg-zinc-900 hover:border-zinc-700 group transition";
+            div.innerHTML = `
+                    <div class="flex items-center gap-3 overflow-hidden">
+                        <div class="w-1.5 h-1.5 rounded-full bg-zinc-600 group-hover:bg-blue-500 transition source-dot" id="dot-${idx}"></div>
+                        <div class="flex flex-col min-w-0">
+                            <span class="text-xs font-medium text-zinc-300 truncate" title="${url}">${domain}</span>
+                            <span class="text-[10px] text-zinc-600 truncate font-mono">${url}</span>
+                        </div>
+                    </div>
+                    <button onclick="removeSource(${idx})" class="text-zinc-600 hover:text-red-400 p-1 opacity-0 group-hover:opacity-100 transition">
+                        <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                    </button>
+                `;
+            list.appendChild(div);
+        });
+        saveState();
+    }
+
+    function addSource() {
+        const input = document.getElementById('sourceInput');
+        const val = input.value.trim();
+        if(!val) return;
+        try { new URL(val); } catch { alert('Invalid URL'); return; }
+
+        state.sources.push(val);
+        input.value = '';
+        renderSources();
+        resetPreview(); // Invalidate preview
+    }
+
+    function removeSource(idx) {
+        state.sources.splice(idx, 1);
+        renderSources();
+        resetPreview();
+    }
+
+    function restoreDefaults() {
+        if(confirm('Reset to default sources?')) {
+            state.sources = [...DEFAULT_SOURCES];
+            renderSources();
+            resetPreview();
+        }
+    }
+
+    // --- MANUAL LOGIC ---
+    function renderManual() {
+        const list = document.getElementById('manualList');
+        list.innerHTML = '';
+
+        state.manual.forEach((tracker, idx) => {
+            const tag = document.createElement('div');
+            tag.className = "inline-flex items-center gap-1.5 px-2 py-1 rounded bg-zinc-800 border border-zinc-700 text-[10px] text-zinc-300 font-mono";
+            tag.innerHTML = `
+                    <span class="truncate max-w-[150px]">${tracker}</span>
+                    <button onclick="removeManual(${idx})" class="hover:text-red-400"><svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>
+                `;
+            list.appendChild(tag);
+        });
+        saveState();
+    }
+
+    function addManual() {
+        const input = document.getElementById('manualInput');
+        const lines = input.value.trim().split('\n');
+        let added = false;
+
+        lines.forEach(line => {
+            const clean = line.trim();
+            if(clean && (clean.startsWith('udp') || clean.startsWith('http'))) {
+                if(!state.manual.includes(clean)) {
+                    state.manual.push(clean);
+                    added = true;
+                }
+            }
+        });
+
+        if(added) {
+            input.value = '';
+            renderManual();
+            resetPreview();
+        }
+    }
+
+    function removeManual(idx) {
+        state.manual.splice(idx, 1);
+        renderManual();
+        resetPreview();
+    }
+
+    // --- CORE: URL GENERATION ---
+    function generateUrl() {
+        // This is the "Stateless" magic.
+        // We encode the config, not the result.
+        const payload = {
+            sources: state.sources,
+            manual: state.manual
+        };
+
+        // 1. Stringify
+        const json = JSON.stringify(payload);
+        // 2. Base64 (Handle Unicode/Spaces if any, though URLs usually don't have them)
+        const b64 = btoa(json);
+        // 3. Construct Link
+        const fullUrl = `${window.location.origin}/api/raw?data=${encodeURIComponent(b64)}`;
+
+        document.getElementById('exportUrl').value = fullUrl;
+    }
+
+    function copyExportUrl() {
+        const el = document.getElementById('exportUrl');
+        el.select();
+        navigator.clipboard.writeText(el.value).then(() => {
+            const btn = document.getElementById('copyExportBtn');
+            const prev = btn.innerText;
+            btn.innerText = "COPIED";
+            btn.classList.add('bg-green-500', 'text-white', 'border-transparent');
+            setTimeout(() => {
+                btn.innerText = prev;
+                btn.classList.remove('bg-green-500', 'text-white', 'border-transparent');
+            }, 2000);
+        });
+    }
+
+    function saveState() {
+        localStorage.setItem('tracky_sources', JSON.stringify(state.sources));
+        localStorage.setItem('tracky_manual', JSON.stringify(state.manual));
+        generateUrl(); // Update URL whenever state changes
+    }
+
+    // --- PREVIEW LOGIC (Using Proxy) ---
+    function resetPreview() {
+        document.getElementById('previewOverlay').classList.remove('hidden');
+        document.getElementById('previewBadge').classList.add('hidden');
+    }
+
+    async function runPreview() {
+        const btn = document.getElementById('previewBtn');
+        const originalText = btn.innerHTML;
+        btn.innerHTML = `<svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Syncing...`;
+        btn.disabled = true;
+
+        const allTrackers = new Set(state.manual);
+
+        // Fetch all sources via our Proxy
+        const promises = state.sources.map(async (url, idx) => {
+            const dot = document.getElementById(`dot-${idx}`);
+            try {
+                const res = await fetch(`/api/proxy?url=${encodeURIComponent(url)}`);
+                if(!res.ok) throw new Error('Err');
+                const text = await res.text();
+
+                text.split('\n').forEach(line => {
+                    const t = line.trim();
+                    if(t && !t.startsWith('#') && (t.startsWith('udp') || t.startsWith('http'))) {
+                        allTrackers.add(t);
+                    }
+                });
+
+                if(dot) dot.classList.replace('bg-zinc-600', 'bg-green-500');
+                if(dot) dot.classList.replace('bg-red-500', 'bg-green-500');
+            } catch(e) {
+                if(dot) dot.classList.replace('bg-zinc-600', 'bg-red-500');
+                if(dot) dot.classList.replace('bg-green-500', 'bg-red-500');
+            }
+        });
+
+        await Promise.all(promises);
+
+        // Render Results
+        const sorted = Array.from(allTrackers).sort();
+        const listEl = document.getElementById('previewList');
+        listEl.innerHTML = '';
+
+        // Optimize large list rendering with Fragment
+        const frag = document.createDocumentFragment();
+        sorted.forEach(t => {
+            const li = document.createElement('li');
+            li.className = "px-4 py-2 hover:bg-zinc-900/50 flex items-center gap-2";
+            li.innerHTML = `<span class="w-1 h-1 rounded-full bg-zinc-700"></span> ${t}`;
+            frag.appendChild(li);
+        });
+        listEl.appendChild(frag);
+
+        document.getElementById('uniqueCount').innerText = sorted.length;
+
+        // Hide Overlay
+        document.getElementById('previewOverlay').classList.add('hidden');
+        document.getElementById('previewBadge').classList.remove('hidden');
+
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+    }
+</script>
+</body>
+</html>
