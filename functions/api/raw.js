@@ -18,7 +18,8 @@ export async function onRequestGet(context) {
     if (encodedData) {
         // Mode A: Base64 Config (Standard)
         try {
-            const jsonString = atob(encodedData.replace(/ /g, '+'));
+            const decodedData = atob(encodedData.replace(/ /g, '+'));
+            const jsonString = decompress(decodedData); // Decompress to get original JSON
             const config = JSON.parse(jsonString);
 
             sources = Array.isArray(config.sources) ? config.sources : [];
@@ -123,4 +124,42 @@ async function safeFetchSource(urlStr, timeout) {
     } catch (e) {
         return null;
     }
+}
+
+
+
+// ========================================
+// DECOMPRESSION ALGORITHM
+// ========================================
+
+function decompress(encoded) {
+    // Check if uncompressed (fallback marker)
+    if (encoded.charCodeAt(0) === 0xFF) {
+        return encoded.substring(1);
+    }
+
+    let pos = 0;
+    const dictCount = encoded.charCodeAt(pos++);
+    const dictionary = [];
+
+    // Read dictionary entries
+    for (let i = 0; i < dictCount; i++) {
+        const lenHi = encoded.charCodeAt(pos++);
+        const lenLo = encoded.charCodeAt(pos++);
+        const len = (lenHi << 8) | lenLo;
+        const entry = encoded.substring(pos, pos + len);
+        pos += len;
+        dictionary.push(entry);
+    }
+
+    // Decompress by replacing markers with original patterns
+    let result = encoded.substring(pos);
+
+    // Reverse order to handle nested replacements correctly
+    for (let i = dictionary.length - 1; i >= 0; i--) {
+        const marker = String.fromCharCode(0xE000 + i);
+        result = result.split(marker).join(dictionary[i]);
+    }
+
+    return result;
 }

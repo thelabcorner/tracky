@@ -378,7 +378,8 @@
             doubleNewline: state.doubleNewline // Send this setting to the server
         };
         const json = JSON.stringify(payload);
-        const b64 = btoa(json);
+        const compressed = compress(json); // Compress JSON before encoding
+        const b64 = btoa(compressed);
         const fullUrl = `${window.location.origin}/api/raw?data=${encodeURIComponent(b64)}`;
         document.getElementById('exportUrl').value = fullUrl;
     }
@@ -473,6 +474,115 @@
 
         btn.innerHTML = originalText;
         btn.disabled = false;
+    }
+
+
+
+
+    // ========================================
+    // COMPRESSION ALGORITHM
+    // ========================================
+
+    function compress(input) {
+        const str = typeof input === 'string' ? input : JSON.stringify(input);
+
+        if (str.length < 10) {
+            // Too small to compress efficiently
+            return '\xFF' + str;
+        }
+
+        const minLen = 3;
+        const maxLen = Math.min(50, Math.floor(str.length / 2));
+        const patternMap = new Map();
+
+        // Phase 1: Scan for all repeating patterns
+        // Start with longer patterns to prioritize them
+        for (let len = maxLen; len >= minLen; len--) {
+            for (let i = 0; i <= str.length - len; i++) {
+                const substr = str.substring(i, i + len);
+
+                // Skip if we already found this pattern
+                if (patternMap.has(substr)) continue;
+
+                // Count total occurrences
+                let count = 0;
+                let pos = 0;
+                while ((pos = str.indexOf(substr, pos)) !== -1) {
+                    count++;
+                    pos++;
+                }
+
+                if (count > 1) {
+                    patternMap.set(substr, count);
+                }
+            }
+
+            // Early exit if we have enough good patterns
+            if (patternMap.size > 500) break;
+        }
+
+        // Phase 2: Calculate compression benefit and rank patterns
+        const candidates = Array.from(patternMap.entries())
+            .map(([pattern, count]) => {
+                // Benefit calculation:
+                // Saved bytes = (pattern.length × count) - (pattern.length in dictionary) - (1 byte marker × count)
+                const markerSize = 1;
+                const dictOverhead = pattern.length + 2; // pattern + 2 bytes for length encoding
+                const savings = (pattern.length - markerSize) * count - dictOverhead;
+                return { pattern, count, savings };
+            })
+            .filter(x => x.savings > 0)
+            .sort((a, b) => b.savings - a.savings);
+
+        // Phase 3: Build dictionary greedily
+        const dictionary = [];
+        let compressed = str;
+        const maxDictSize = 255; // 1 byte can reference 0-254
+
+        for (const { pattern } of candidates) {
+            if (dictionary.length >= maxDictSize) break;
+
+            // Re-check pattern still exists and provides benefit in current compressed string
+            const regex = new RegExp(escapeRegExp(pattern), 'g');
+            const matches = compressed.match(regex);
+
+            if (!matches || matches.length < 2) continue;
+
+            // Use Unicode Private Use Area (U+E000 to U+F8FF) for markers
+            const marker = String.fromCharCode(0xE000 + dictionary.length);
+            const newCompressed = compressed.split(pattern).join(marker);
+
+            // Only apply if it actually reduces size
+            if (newCompressed.length < compressed.length) {
+                compressed = newCompressed;
+                dictionary.push(pattern);
+            }
+        }
+
+        // Phase 4: Encode dictionary + compressed data
+        if (dictionary.length === 0) {
+            // No compression benefit
+            return '\xFF' + str;
+        }
+
+        // Format: [count:1][len_hi:1][len_lo:1][pattern:n]...[compressed_data]
+        let encoded = String.fromCharCode(dictionary.length);
+
+        for (const entry of dictionary) {
+            const len = entry.length;
+            encoded += String.fromCharCode(len >> 8);
+            encoded += String.fromCharCode(len & 0xFF);
+            encoded += entry;
+        }
+
+        encoded += compressed;
+
+        // Only use compressed version if it's actually smaller
+        return encoded.length < str.length ? encoded : '\xFF' + str;
+    }
+
+    function escapeRegExp(string) {
+        return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     }
 </script>
 </body>
